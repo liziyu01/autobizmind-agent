@@ -5,6 +5,7 @@ AutoBizMind 自适应业务决策Agent
 """
 from fastapi import FastAPI
 from app.config import config
+from app.redis_client import redis_client
 
 app = FastAPI(
     title=config.APP_NAME,
@@ -18,7 +19,11 @@ app = FastAPI(
 async def root():
     """
     根路径健康检查
+
+    包含 Redis 连接状态监测
     """
+    # 检测 Redis 状态
+    redis_status = "connected" if redis_client.ping() else "disconnected"
     return {
         "service": config.APP_NAME,
         "version": config.APP_VERSION,
@@ -30,10 +35,15 @@ async def root():
 async def health_check():
     """
     详细健康检查
+
+    包含 Redis 连接状态监测
     """
+    # 检测 Redis 状态
+    redis_status = "connected" if redis_client.ping() else "disconnected"
+
     return {
-        "status": "healthy",
-        "redis": "",
+        "status": "healthy" if redis_status == "connected" else "degraded",
+        "redis": redis_status,
         "llm": ""
     }
 

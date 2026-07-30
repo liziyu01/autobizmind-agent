@@ -23,7 +23,7 @@ env/
 .env.*
 !.env.example
 
-# PyCharm / JetBrains IDE【关键：整文件夹忽略】
+# PyCharm / JetBrains IDE
 .idea/
 
 # Vim临时文件
@@ -39,7 +39,7 @@ uploads/
 outputs/
 *.log
 
-# pytest（可选）
+# pytest
 .pytest_cache/
 .coverage
 htmlcov/
