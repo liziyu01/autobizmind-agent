@@ -210,5 +210,5 @@ class RedisClient:
             return False
 
 
-# 创建全局单例实例（方便其他模块直接导入）
+# 创建全局单例实例
 redis_client = RedisClient()

@@ -3,16 +3,24 @@ FastAPI 应用入口
 
 AutoBizMind 自适应业务决策Agent
 """
-from fastapi import FastAPI, HTTPException
-from langchain_core.messages import HumanMessage, AIMessage
-from fastapi.responses import JSONResponse
+import os
+import shutil
+import logging
+from typing import Optional
 
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.redis_client import redis_client
-from app.scheme import ChatResponse, ChatRequest
-from app.agent import agent
+from app.scheme import ChatResponse, ChatRequest, UploadResponse, SearchRequest
+from app.agent import agent, agent_rag
 from app.session_manager import get_messages_from_history, append_message
+from app.vectordb import add_document, search_documents, get_kb_stats
+
+from langchain_core.messages import HumanMessage, AIMessage
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=config.APP_NAME,
@@ -21,6 +29,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redos"
 )
+
+# 上传文件临时目录
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/")
 async def root():
@@ -54,11 +66,11 @@ async def health_check():
         "llm": "ready"
     }
 
-# 对话接口
+# 普通对话接口（无 RAG + 有 Redis)
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    对话接口（带 Redis 会话记忆）
+    普通对话接口（带 Redis 会话记忆）
 
     - 自动从 Redis 加载 session_id 历史
     - 对话结束后自动保存到 Redis
@@ -95,6 +107,122 @@ async def chat(request: ChatRequest):
             status_code=500,
             detail=str(e)
         )
+
+# RAG 对话接口
+@app.post("/chat/rag", response_model=ChatResponse)
+async def chat_rag(request: ChatRequest):
+    """
+    RAG 增强对话（带知识库检索 + 会话记忆）
+
+    从知识库中检索相关文档，再生成回答。
+    """
+    session_id = request.session_id
+
+    try:
+        # 1. 加载历史
+        history_messages = get_messages_from_history(session_id)
+
+        # 2. 构造状态（包含用户消息）
+        state = {
+            "messages": history_messages + [HumanMessage(content=request.message)]
+        }
+
+        # 3. 调用 RAG Agent（自动检索 + 生成）
+        result = agent_rag.invoke(state)
+
+        # 4. 提取回复
+        last_message = result["messages"][-1]
+        reply = last_message.content
+
+        # 5. 保存历史
+        append_message(session_id, HumanMessage(content=request.message))
+        append_message(session_id, AIMessage(content=reply))
+
+        return ChatResponse(response=reply, session_id=session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 文档上传接口
+@app.post("/upload_doc", response_model=UploadResponse)
+async def upload_document(
+        file: UploadFile = File(...),
+        collection: str = "knowledge_base"
+):
+    """
+    上传文档到知识库。
+
+    支持格式: PDF, Word (.docx), TXT
+    文档会被自动切片并向量化存入 ChromaDB。
+    """
+    # 1. 验证文件格式
+    allowed_extensions = [".pdf", ".docx", ".txt"]
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式。支持: {', '.join(allowed_extensions)}"
+        )
+
+    # 2. 保存临时文件
+    temp_path = os.path.join(UPLOAD_DIR, file.filename)
+    try:
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"📁 文件已保存: {temp_path}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件保存失败: {e}")
+
+    # 3. 添加到知识库
+    try:
+        chunk_count = add_document(temp_path, collection_name=collection)
+    except Exception as e:
+        # 清理临时文件
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
+
+    # 4. 清理临时文件
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
+
+    return UploadResponse(
+        filename=file.filename,
+        chunk_count=chunk_count,
+        message=f"文档已成功导入，共 {chunk_count} 个片段"
+    )
+
+# 知识库统计接口
+@app.get("/kb/stats")
+async def kb_stats(collection: str = "knowledge_base"):
+    """获取知识库统计信息"""
+    try:
+        stats = get_kb_stats(collection)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 检索测试接口
+@app.post("/kb/search")
+async def kb_search(request: SearchRequest):
+    """
+    测试知识库检索（不调用 LLM，只返回检索结果）
+    """
+    try:
+        docs = search_documents(request.query, top_k=request.top_k)
+        results = [
+            {
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+            }
+            for doc in docs
+        ]
+        return {
+            "query": request.query,
+            "results": results,
+            "count": len(results)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 启动入口
 if __name__ == "__main__":
