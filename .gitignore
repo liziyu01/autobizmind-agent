@@ -43,3 +43,8 @@ outputs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# 向量库数据
+chroma_db/
+*.db
+*.sqlite3
