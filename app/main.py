@@ -7,13 +7,14 @@ import os
 import shutil
 import logging
 from typing import Optional
+import tools.query_orders
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.redis_client import redis_client
-from app.scheme import ChatResponse, ChatRequest, UploadResponse, SearchRequest
+from app.schemas import ChatResponse, ChatRequest, UploadResponse, SearchRequest
 from app.agent import agent, agent_rag
 from app.session_manager import get_messages_from_history, append_message
 from app.vectordb import add_document, search_documents, get_kb_stats
@@ -223,6 +224,70 @@ async def kb_search(request: SearchRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# 工具管理接口
+# ============================================================
+
+from app.tool_registry import (
+    get_all_tools_metadata,
+    get_tool_metadata,
+    call_tool,
+    register_tool,
+    clear_all_tools
+)
+from app.schemas import ToolCallRequest, ToolCallResponse, ToolRegisterRequest
+
+
+@app.get("/tools")
+async def list_tools():
+    """列出所有已注册的工具"""
+    tools = get_all_tools_metadata()
+    return {
+        "count": len(tools),
+        "tools": tools
+    }
+
+
+@app.get("/tools/{tool_name}")
+async def get_tool(tool_name: str):
+    """获取单个工具的元数据"""
+    meta = get_tool_metadata(tool_name)
+    if meta is None:
+        raise HTTPException(status_code=404, detail=f"工具不存在: {tool_name}")
+    return meta
+
+
+@app.post("/tools/call")
+async def call_tool_api(request: ToolCallRequest):
+    """调用工具（供 Agent 使用）"""
+    try:
+        result = call_tool(request.tool_name, request.params)
+        return {
+            "tool": request.tool_name,
+            "result": result,
+            "status": "success"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"工具执行失败: {str(e)}")
+
+
+@app.post("/tools/register")
+async def register_tool_api(request: ToolRegisterRequest):
+    """动态注册新工具（供热加载使用）"""
+    # 注意：handler 无法通过 API 传递，需要在代码中预先定义
+    success = register_tool(
+        name=request.name,
+        description=request.description,
+        input_schema=request.input_schema
+    )
+    if success:
+        return {"message": f"工具已注册: {request.name}"}
+    else:
+        raise HTTPException(status_code=500, detail="工具注册失败")
 
 # 启动入口
 if __name__ == "__main__":
