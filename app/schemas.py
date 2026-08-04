@@ -49,3 +49,13 @@ class ToolRegisterRequest(BaseModel):
     name: str
     description: str
     input_schema: Dict[str, Any]
+
+class ToolChatRequest(BaseModel):
+    message: str
+    session_id: str = "default"
+
+
+class ToolChatResponse(BaseModel):
+    response: str
+    session_id: str
+    tool_calls: int = 0

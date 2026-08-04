@@ -14,10 +14,11 @@ from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.redis_client import redis_client
-from app.schemas import ChatResponse, ChatRequest, UploadResponse, SearchRequest
+from app.schemas import ChatResponse, ChatRequest, UploadResponse, SearchRequest, ToolChatRequest, ToolChatResponse
 from app.agent import agent, agent_rag
-from app.session_manager import get_messages_from_history, append_message
+from app.session_manager import get_messages_from_history, append_message,  get_messages_from_history, append_message
 from app.vectordb import add_document, search_documents, get_kb_stats
+from app.tool_agent import tool_agent
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -288,6 +289,48 @@ async def register_tool_api(request: ToolRegisterRequest):
         return {"message": f"工具已注册: {request.name}"}
     else:
         raise HTTPException(status_code=500, detail="工具注册失败")
+
+# ============================================================
+# 工具调用对话接口
+# ============================================================
+@app.post("/chat/tool", response_model=ToolChatResponse)
+async def chat_with_tools(request: ToolChatRequest):
+    """
+    工具调用对话接口（Agent 自动调用工具）
+
+    支持：订单查询、数学计算、HTTP 请求、多轮链式调用
+    """
+    session_id = request.session_id
+
+    try:
+        history_messages = get_messages_from_history(session_id)
+
+        state = {
+            "messages": history_messages + [HumanMessage(content=request.message)]
+        }
+
+        result = tool_agent.invoke(state)
+
+        messages = result.get("messages", [])
+        if not messages:
+            raise ValueError("Agent 未返回任何消息")
+
+        last_msg = messages[-1]
+        reply = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+        append_message(session_id, HumanMessage(content=request.message))
+        for msg in messages:
+            if isinstance(msg, AIMessage):
+                append_message(session_id, msg)
+
+        return ToolChatResponse(
+            response=reply,
+            session_id=session_id,
+            tool_calls=len([m for m in messages if "工具" in m.content])
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 启动入口
 if __name__ == "__main__":

@@ -73,11 +73,11 @@ def get_all_tools_metadata() -> Dict[str, Dict[str, Any]]:
         {tool_name: metadata, ...}
     """
     # 获取所有 tools:* 的 key
-    keys = redis_client.client.keys(f"{TOOL_KEY_PREFIX}:*")
+    keys = redis_client.client.keys(f"{TOOL_KEY_PREFIX}:*")  # 如 [tools:query_orders , tools:...]
     result = {}
     for key in keys:
-        tool_name = key.replace(f"{TOOL_KEY_PREFIX}:", "")
-        metadata = redis_client.get(key)
+        tool_name = key.replace(f"{TOOL_KEY_PREFIX}:", "")  # query_orders
+        metadata = redis_client.get(key)  #  Dict[str, Any]
         if metadata:
             result[tool_name] = metadata
     return result
