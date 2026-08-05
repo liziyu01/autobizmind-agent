@@ -250,6 +250,13 @@ async def list_tools():
         "tools": tools
     }
 
+@app.get("/tools/version")
+async def get_tools_version():
+    """获取当前工具注册中心版本号"""
+    return {
+        "version": get_registry_version(),
+        "tool_count": len(get_all_tools_metadata())
+    }
 
 @app.get("/tools/{tool_name}")
 async def get_tool(tool_name: str):
@@ -331,6 +338,74 @@ async def chat_with_tools(request: ToolChatRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+#  热加载接口
+# ============================================================
+from app.tool_registry import (
+    get_all_tools_metadata,
+    get_tool_metadata,
+    call_tool,
+    register_tool_dynamic,
+    refresh_tools,
+    get_registry_version,
+    unregister_tool,
+    clear_all_tools,
+)
+from app.schemas import ToolRegisterRequest, ToolRefreshResponse
+
+
+@app.post("/tools/refresh")
+async def refresh_tools_api():
+    """
+    刷新工具列表。
+
+    重新从 Redis 加载工具元数据，让 Agent 感知新注册的工具。
+    """
+    result = refresh_tools()
+    return {
+        "message": "工具列表已刷新",
+        "version": result["version"],
+        "tool_count": result["tool_count"],
+        "tools": result["tools"],
+        "missing_handlers": result["missing_handlers"]
+    }
+
+
+@app.post("/tools/register_dynamic")
+async def register_tool_dynamic_api(request: ToolRegisterRequest):
+    """
+    动态注册工具（元数据存入 Redis）。
+
+    注意：handler 需要另外注入。如果提供 handler_code，
+    会在当前进程中动态创建 handler（仅限开发环境）。
+    """
+    success = register_tool_dynamic(
+        name=request.name,
+        description=request.description,
+        input_schema=request.input_schema,
+        handler_code=request.handler_code
+    )
+
+    if success:
+        return {
+            "message": f"工具已注册: {request.name}",
+            "name": request.name
+        }
+    else:
+        raise HTTPException(status_code=500, detail="工具注册失败")
+
+
+@app.delete("/tools/{tool_name}")
+async def unregister_tool_api(tool_name: str):
+    """删除已注册的工具"""
+    success = unregister_tool(tool_name)
+    if success:
+        return {"message": f"工具已删除: {tool_name}"}
+    else:
+        raise HTTPException(status_code=404, detail=f"工具不存在: {tool_name}")
+
+
 
 # 启动入口
 if __name__ == "__main__":

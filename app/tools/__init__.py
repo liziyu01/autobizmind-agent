@@ -6,3 +6,4 @@
 from app.tools import query_orders
 from app.tools import http_request
 from app.tools import calculator
+from app.tools import text_stats

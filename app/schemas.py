@@ -4,7 +4,7 @@
 用于校验 Fast API接口请求/响应校验
 """
 from pydantic import BaseModel
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 
 class ChatRequest(BaseModel):
@@ -59,3 +59,19 @@ class ToolChatResponse(BaseModel):
     response: str
     session_id: str
     tool_calls: int = 0
+
+class ToolRegisterRequest(BaseModel):
+    """工具注册   请求（热加载用）"""
+    name: str
+    description: str
+    input_schema: Dict[str, Any]
+    handler_code: Optional[str] = None  # Python 代码字符串（仅开发环境）
+
+
+class ToolRefreshResponse(BaseModel):
+    """工具刷新响应"""
+    message: str
+    version: int
+    tool_count: int
+    tools: List[str]
+    missing_handlers: List[str]
