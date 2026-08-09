@@ -19,6 +19,7 @@ from app.agent import agent, agent_rag
 from app.session_manager import get_messages_from_history, append_message,  get_messages_from_history, append_message
 from app.vectordb import add_document, search_documents, get_kb_stats
 from app.tool_agent import tool_agent
+from app.tool_logger import get_tool_logs, get_tool_stats
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -405,7 +406,23 @@ async def unregister_tool_api(tool_name: str):
     else:
         raise HTTPException(status_code=404, detail=f"工具不存在: {tool_name}")
 
+# ============================================================
+#  日志接口
+# ============================================================
+@app.get("/tools/logs")
+async def get_logs(tool_name: Optional[str] = None, limit: int = 50):
+    """获取工具调用日志"""
+    logs = get_tool_logs(tool_name, limit)
+    return {
+        "count": len(logs),
+        "logs": logs
+    }
 
+
+@app.get("/tools/stats")
+async def get_stats(tool_name: Optional[str] = None):
+    """获取工具调用统计"""
+    return get_tool_stats(tool_name)
 
 # 启动入口
 if __name__ == "__main__":

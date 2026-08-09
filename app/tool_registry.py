@@ -5,10 +5,14 @@ MCP 风格工具注册中心
 热加载支持（工具刷新、动态注册）
 """
 import json
+import time
 import logging
-from typing import Dict, Any, Optional, Callable, List
+import traceback
+from datetime import datetime
+from typing import Dict, Any, Optional, Callable, List, Union
 
 from app.redis_client import redis_client
+from app.tool_logger import log_tool_call
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,6 @@ TOOL_KEY_PREFIX = "tools"
 
 _handlers: Dict[str, Callable] = {}
 _handler_registry_version: int = 0  # 版本号，用于检测变更
-
 
 def get_tool_key(tool_name: str) -> str:
     return f"{TOOL_KEY_PREFIX}:{tool_name}"
@@ -74,18 +77,172 @@ def get_tool_handler(tool_name: str) -> Optional[Callable]:
     """获取工具执行函数"""
     return _handlers.get(tool_name)
 
+# ============================================================
+# 升级函数 -> 升级后  call_tool_v2
+# ============================================================
+# def call_tool(tool_name: str, params: Dict[str, Any]) -> Any:
+#     """调用工具"""
+#     handler = get_tool_handler(tool_name)
+#     if handler is None:
+#         raise ValueError(f"工具不存在或未注册: {tool_name}")
+#
+#     try:
+#         return handler(**params)
+#     except Exception as e:
+#         logger.error(f"工具执行失败 [{tool_name}]: {e}")
+#         raise
 
-def call_tool(tool_name: str, params: Dict[str, Any]) -> Any:
-    """调用工具"""
-    handler = get_tool_handler(tool_name)
+# ============================================================
+# 增强：工具调用（支持结构化错误返回）
+# ============================================================
+
+class ToolCallResult:
+    """
+    工具调用结果封装。
+
+    统一工具调用的返回格式，让 Agent 能区分「成功」和「失败」。
+    """
+
+    def __init__(
+            self,
+            success: bool,
+            data: Any = None,
+            error: Optional[str] = None,
+            error_type: Optional[str] = None,
+            duration_ms: float = 0
+    ):
+        self.success = success
+        self.data = data
+        self.error = error
+        self.error_type = error_type
+        self.duration_ms = duration_ms
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典，便于 JSON 序列化和 Agent 理解"""
+        return {
+            "success": self.success,
+            "data": self.data if self.success else None,
+            "error": self.error if not self.success else None,
+            "error_type": self.error_type if not self.success else None,
+            "duration_ms": round(self.duration_ms, 2)
+        }
+
+    def __repr__(self):
+        if self.success:
+            return f"ToolCallResult(success=True, data={self.data})"
+        else:
+            return f"ToolCallResult(success=False, error={self.error})"
+
+
+def call_tool_v2(
+        tool_name: str,
+        params: Dict[str, Any],
+        max_retries: int = 2,
+        retry_delay: float = 0.5
+) -> ToolCallResult:
+    """
+    增强版工具调用（支持重试 + 结构化错误返回）。
+
+    Args:
+        tool_name: 工具名称
+        params: 参数字典
+        max_retries: 最大重试次数（临时性错误自动重试）
+        retry_delay: 重试间隔（秒）
+
+    Returns:
+        ToolCallResult 对象（包含成功/失败状态和数据/错误信息）
+    """
+    start_time = time.time()
+    handler = get_tool_handler(tool_name)  # 注意：这里用的是 get_tool_handler
+
     if handler is None:
-        raise ValueError(f"工具不存在或未注册: {tool_name}")
+        return ToolCallResult(
+            success=False,
+            error=f"工具 '{tool_name}' 不存在或未注册",
+            error_type="NOT_FOUND",
+            duration_ms=(time.time() - start_time) * 1000
+        )
 
-    try:
-        return handler(**params)
-    except Exception as e:
-        logger.error(f"工具执行失败 [{tool_name}]: {e}")
-        raise
+    last_error = None
+    last_error_type = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            # 执行工具
+            result = handler(**params)
+
+            duration_ms = (time.time() - start_time) * 1000
+
+            # 如果工具本身返回了错误格式（业务错误）
+            if isinstance(result, dict) and result.get("_error"):
+                return ToolCallResult(
+                    success=False,
+                    error=result.get("_error"),
+                    error_type="BUSINESS_ERROR",
+                    duration_ms=duration_ms
+                )
+
+            return ToolCallResult(
+                success=True,
+                data=result,
+                duration_ms=duration_ms
+            )
+
+        except ValueError as e:
+            # 参数错误 → 不重试
+            last_error = str(e)
+            last_error_type = "PARAM_ERROR"
+            break
+
+        except (ConnectionError, TimeoutError) as e:
+            # 网络/超时错误 → 可重试
+            last_error = str(e)
+            last_error_type = "NETWORK_ERROR"
+            if attempt < max_retries:
+                logger.warning(f"⏳ 工具 {tool_name} 第 {attempt + 1} 次重试: {e}")
+                time.sleep(retry_delay)
+                continue
+            break
+
+        except Exception as e:
+            # 其他未知错误 → 不重试
+            last_error = str(e)
+            last_error_type = "UNKNOWN_ERROR"
+            logger.error(f"❌ 工具 {tool_name} 执行异常: {e}\n{traceback.format_exc()}")
+            break
+
+    duration_ms = (time.time() - start_time) * 1000
+    result = ToolCallResult(
+        success=False,
+        error=last_error or "未知错误",
+        error_type=last_error_type or "UNKNOWN_ERROR",
+        duration_ms=duration_ms
+    )
+
+    # 记录日志
+    log_tool_call(
+        tool_name=tool_name,
+        params=params,
+        success=False,
+        result=None,
+        error=last_error or "未知错误",
+        error_type=last_error_type or "UNKNOWN_ERROR",
+        duration_ms=duration_ms
+    )
+
+    return result
+
+# 兼容旧接口
+def call_tool(tool_name: str, params: Dict[str, Any]) -> Any:
+    """
+    兼容旧版调用接口（直接返回数据或抛出异常）。
+    新代码使用 call_tool_v2。
+    """
+    result = call_tool_v2(tool_name, params)
+    if result.success:
+        return result.data
+    else:
+        raise RuntimeError(f"工具调用失败 [{result.error_type}]: {result.error}")
 
 
 def unregister_tool(tool_name: str) -> bool:
@@ -99,7 +256,7 @@ def unregister_tool(tool_name: str) -> bool:
 
 
 # ============================================================
-# 新增：热加载核心功能（Day 12）
+# 热加载核心功能
 # ============================================================
 
 def refresh_tools() -> Dict[str, Any]:
@@ -147,7 +304,7 @@ def get_registry_version() -> int:
 
 
 # ============================================================
-# 新增：动态注册工具（通过 API 调用）
+# 动态注册工具（通过 API 调用）
 # ============================================================
 
 def register_tool_dynamic(
