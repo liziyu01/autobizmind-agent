@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 # 定义状态 State
 class AgentState(TypedDict):
     messages: Annotated[List[Dict[str, Any]], add_messages]
-    retrieved_content: Optional[str]
+    retrieved_context: Optional[str]
 
 # 初始化 LLM
 llm = ChatOpenAI(
     model=config.MODEL_NAME,
     api_key=config.OPENAI_API_KEY,
-    base_url=config.OPENAI_BASE_RUL,
+    base_url=config.OPENAI_BASE_URL,
     temperature=0.7
 )
 
@@ -49,7 +49,7 @@ def chat_node(state: AgentState) -> Dict[str, Any]:
     try:
         response = llm.invoke(messages)
         logger.info(f"LLM 响应成功，长度：{len(response.content)}")
-        return {"messages": response}
+        return {"messages": [response]}
     except Exception as e:
         logger.error(f"LLM 调用失败：{e}")
         error_msg = AIMessage(content="抱歉，我遇到了技术问题，请稍后再试。")
@@ -87,9 +87,9 @@ def rag_retrieval_node(state: AgentState) -> Dict[str, Any]:
             logger.info(f"📚 RAG 检索到 {len(docs)} 个片段")
 
             # 检检索结果存入状态
-            return {"retrieved_content": context}
+            return {"retrieved_context": context}
         else:
-            return {"retrieved_content": ""}
+            return {"retrieved_context": ""}
 
     except Exception as e:
         logger.error(f"RAG 检索失败: {e}")

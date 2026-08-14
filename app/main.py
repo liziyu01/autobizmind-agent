@@ -16,10 +16,12 @@ from app.config import config
 from app.redis_client import redis_client
 from app.schemas import ChatResponse, ChatRequest, UploadResponse, SearchRequest, ToolChatRequest, ToolChatResponse
 from app.agent import agent, agent_rag
-from app.session_manager import get_messages_from_history, append_message,  get_messages_from_history, append_message
+from app.session_manager import get_messages_from_history, append_message
 from app.vectordb import add_document, search_documents, get_kb_stats
 from app.tool_agent import tool_agent
 from app.tool_logger import get_tool_logs, get_tool_stats
+from app.session_manager import get_session_stats, clear_history
+
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -259,6 +261,24 @@ async def get_tools_version():
         "tool_count": len(get_all_tools_metadata())
     }
 
+# ============================================================
+#  日志接口
+# ============================================================
+@app.get("/tools/logs")
+async def get_logs(tool_name: Optional[str] = None, limit: int = 50):
+    """获取工具调用日志"""
+    logs = get_tool_logs(tool_name, limit)
+    return {
+        "count": len(logs),
+        "logs": logs
+    }
+
+
+@app.get("/tools/stats")
+async def get_stats(tool_name: Optional[str] = None):
+    """获取工具调用统计"""
+    return get_tool_stats(tool_name)
+
 @app.get("/tools/{tool_name}")
 async def get_tool(tool_name: str):
     """获取单个工具的元数据"""
@@ -407,22 +427,24 @@ async def unregister_tool_api(tool_name: str):
         raise HTTPException(status_code=404, detail=f"工具不存在: {tool_name}")
 
 # ============================================================
-#  日志接口
+#   会话统计接口
 # ============================================================
-@app.get("/tools/logs")
-async def get_logs(tool_name: Optional[str] = None, limit: int = 50):
-    """获取工具调用日志"""
-    logs = get_tool_logs(tool_name, limit)
-    return {
-        "count": len(logs),
-        "logs": logs
-    }
+
+@app.get("/session/{session_id}/stats")
+async def session_stats(session_id: str):
+    """获取会话统计信息（消息数、窗口使用率等）"""
+    stats = get_session_stats(session_id)
+    return stats
 
 
-@app.get("/tools/stats")
-async def get_stats(tool_name: Optional[str] = None):
-    """获取工具调用统计"""
-    return get_tool_stats(tool_name)
+@app.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    """清空会话历史"""
+    success = clear_history(session_id)
+    if success:
+        return {"message": f"会话 {session_id} 已清空"}
+    else:
+        raise HTTPException(status_code=500, detail="清空会话失败")
 
 # 启动入口
 if __name__ == "__main__":

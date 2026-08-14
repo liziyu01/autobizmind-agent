@@ -15,13 +15,14 @@ class Config:
     """
     # llm config
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    OPENAI_BASE_RUL: str = os.getenv("OPENAI_BASE_URL")
+    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL")
     MODEL_NAME: str = os.getenv("MODEL_NAME", "")
 
     # Redis Config
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    MAX_HISTORY_ROUNDS: int = int(os.getenv("MAX_HISTORY_ROUNDS", "10"))
 
     # Application Config
     APP_NAME: str = "AutoBizMind-Agent"

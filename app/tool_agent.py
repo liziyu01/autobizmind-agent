@@ -36,7 +36,7 @@ class ToolAgentState(TypedDict):
 llm = ChatOpenAI(
     model=config.MODEL_NAME,
     api_key=config.OPENAI_API_KEY,
-    base_url=config.OPENAI_BASE_RUL,
+    base_url=config.OPENAI_BASE_URL,
     temperature=0.3,
 )
 
@@ -240,6 +240,8 @@ def execute_tool(state: ToolAgentState) -> Dict[str, Any]:
                 content=f"✅ 工具 {action} 执行成功：\n{data_str}"
             )
 
+            result_messages.append(result_msg)
+
             execution_summary.append({
                 "tool": action,
                 "success": True,
@@ -345,16 +347,11 @@ def route_after_execution(state: ToolAgentState) -> Literal["should_use_tool", "
         # 检查是否所有工具都执行成功了
         all_success = all(item.get("success", False) for item in execution_summary)
         if all_success:
-            # 全部成功，但可能还需要进一步处理（如多轮链式调用）
-            # 检查最后一条消息是否包含「执行成功」
-            last_msg = messages[-1]
-            content = last_msg.content if hasattr(last_msg, "content") else ""
-            if "执行成功" in content:
-                return "should_use_tool"
-
-        # 有失败的工具，回到决策节点让 Agent 决定
-        return "should_use_tool"
-
+            # ✅ 全部成功 → 直接结束，不再循环
+            return "should_use_tool"
+        else:
+            # ❌ 有失败 → 回到决策节点，让 Agent 决定是重试还是放弃
+            return "should_use_tool"
     return "END"
 
 # ============================================================

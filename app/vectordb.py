@@ -27,7 +27,7 @@ PERSIST_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "chroma_d
 embeddings = OpenAIEmbeddings(
     model="embedding-3",
     api_key=config.OPENAI_API_KEY,
-    base_url=config.OPENAI_BASE_RUL
+    base_url=config.OPENAI_BASE_URL
 )
 
 # ============================================================

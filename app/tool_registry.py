@@ -156,6 +156,16 @@ def call_tool_v2(
     handler = get_tool_handler(tool_name)  # 注意：这里用的是 get_tool_handler
 
     if handler is None:
+        duration_ms = (time.time() - start_time) * 1000
+        log_tool_call(
+            tool_name=tool_name,
+            params=params,
+            success=False,
+            result=None,
+            error=f"工具 '{tool_name}' 不存在或未注册",
+            error_type="NOT_FOUND",
+            duration_ms=duration_ms
+        )
         return ToolCallResult(
             success=False,
             error=f"工具 '{tool_name}' 不存在或未注册",
@@ -175,12 +185,31 @@ def call_tool_v2(
 
             # 如果工具本身返回了错误格式（业务错误）
             if isinstance(result, dict) and result.get("_error"):
+                log_tool_call(
+                    tool_name=tool_name,
+                    params=params,
+                    success=False,
+                    result=None,
+                    error=result.get("_error"),
+                    error_type="BUSINESS_ERROR",
+                    duration_ms=duration_ms
+                )
                 return ToolCallResult(
                     success=False,
                     error=result.get("_error"),
                     error_type="BUSINESS_ERROR",
                     duration_ms=duration_ms
                 )
+
+            log_tool_call(
+                tool_name=tool_name,
+                params=params,
+                success=True,
+                result=result,
+                error=None,
+                error_type=None,
+                duration_ms=duration_ms
+            )
 
             return ToolCallResult(
                 success=True,
@@ -212,12 +241,6 @@ def call_tool_v2(
             break
 
     duration_ms = (time.time() - start_time) * 1000
-    result = ToolCallResult(
-        success=False,
-        error=last_error or "未知错误",
-        error_type=last_error_type or "UNKNOWN_ERROR",
-        duration_ms=duration_ms
-    )
 
     # 记录日志
     log_tool_call(
@@ -230,7 +253,12 @@ def call_tool_v2(
         duration_ms=duration_ms
     )
 
-    return result
+    return  ToolCallResult(
+        success=False,
+        error=last_error or "未知错误",
+        error_type=last_error_type or "UNKNOWN_ERROR",
+        duration_ms=duration_ms
+    )
 
 # 兼容旧接口
 def call_tool(tool_name: str, params: Dict[str, Any]) -> Any:
