@@ -126,7 +126,7 @@ def call_tool_v2(
         retry_delay: float = 0.5
 ) -> ToolCallResult:
     """
-    增强版工具调用（支持重试 + 结构化错误返回）。
+    工具调用（支持重试 + 结构化错误返回）。
 
     Args:
         tool_name: 工具名称
@@ -138,7 +138,7 @@ def call_tool_v2(
         ToolCallResult 对象（包含成功/失败状态和数据/错误信息）
     """
     start_time = time.time()
-    handler = get_tool_handler(tool_name)  # 注意：这里用的是 get_tool_handler
+    handler = get_tool_handler(tool_name)
 
     if handler is None:
         duration_ms = (time.time() - start_time) * 1000
@@ -167,6 +167,24 @@ def call_tool_v2(
             result = handler(**params)
 
             duration_ms = (time.time() - start_time) * 1000
+
+            # 检查：业务逻辑是否失败了？（工具返回了 {"success": False}）
+            if isinstance(result, dict) and result.get("success") is False:
+                log_tool_call(
+                    tool_name=tool_name,
+                    params=params,
+                    success=False,
+                    result=None,
+                    error=result.get("error", "业务执行失败"),
+                    error_type=result.get("error_type", "BUSINESS_ERROR"),
+                    duration_ms=duration_ms
+                )
+                return ToolCallResult(
+                    success=False,
+                    error=result.get("error", "业务执行失败"),
+                    error_type=result.get("error_type", "BUSINESS_ERROR"),
+                    duration_ms=duration_ms
+                )
 
             # 如果工具本身返回了错误格式（业务错误）
             if isinstance(result, dict) and result.get("_error"):

@@ -9,6 +9,7 @@ from app.tools import calculator
 from app.tools import text_stats
 from app.tools import customer_tools
 from app.tools import product_tools
+from app.tools import quote_calculator
 
 # 所有工具列表
 ALL_TOOLS = [
@@ -18,6 +19,7 @@ ALL_TOOLS = [
     text_stats,
     customer_tools,
     product_tools,
+    quote_calculator,
 ]
 
 
