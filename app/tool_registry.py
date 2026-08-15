@@ -78,21 +78,6 @@ def get_tool_handler(tool_name: str) -> Optional[Callable]:
     return _handlers.get(tool_name)
 
 # ============================================================
-# 升级函数 -> 升级后  call_tool_v2
-# ============================================================
-# def call_tool(tool_name: str, params: Dict[str, Any]) -> Any:
-#     """调用工具"""
-#     handler = get_tool_handler(tool_name)
-#     if handler is None:
-#         raise ValueError(f"工具不存在或未注册: {tool_name}")
-#
-#     try:
-#         return handler(**params)
-#     except Exception as e:
-#         logger.error(f"工具执行失败 [{tool_name}]: {e}")
-#         raise
-
-# ============================================================
 # 增强：工具调用（支持结构化错误返回）
 # ============================================================
 

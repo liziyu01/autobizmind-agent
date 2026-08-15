@@ -154,52 +154,8 @@ def should_use_tool(state: ToolAgentState) -> Dict[str, Any]:
             "tool_results": []
         }
 
-
 # ============================================================
-# 5. 节点函数：执行工具(弃用 -> 转升级版 execute_tool
-# ============================================================
-# def execute_tool(state: ToolAgentState) -> Dict[str, Any]:
-#     """工具执行节点：根据决策结果调用工具。"""
-#     tool_results = state.get("tool_results", [])
-#     if not tool_results:  # 没有工具要执行，直接返回
-#         return {}
-#
-#     result_messages = []
-#
-#     for tool_call in tool_results:
-#         action = tool_call.get("action")
-#         params = tool_call.get("params", {})
-#
-#         logger.info(f"⚙️ 执行工具: {action} 参数: {params}")
-#
-#         try:
-#             result = call_tool(action, params)
-#
-#             # 将结果转为字符串，方便 LLM 理解
-#             result_str = json.dumps(result, ensure_ascii=False, indent=2)
-#             logger.info(f"✅ 工具执行成功: {action}")
-#
-#             # 把工具执行结果作为 AI 消息返回，追加到对话中
-#             result_msg = AIMessage(
-#                 content=f"工具 {action} 执行结果：\n{result_str}"
-#             )
-#             result_messages.append(result_msg)
-#
-#         except Exception as e:
-#             logger.error(f"❌ 工具执行失败 {action}: {e}")
-#             error_msg = AIMessage(
-#                 content=f"工具 {action} 执行失败：{str(e)}"
-#             )
-#             result_messages.append(error_msg)
-#
-#     # 返回结果消息（追加到 messages）
-#     return {
-#         "messages": result_messages,
-#         "tool_results": []
-#     }
-
-# ============================================================
-# 5. 升级：execute_tool 节点（支持结构化错误）
+# 5. execute_tool 节点（支持结构化错误）
 # ============================================================
 def execute_tool(state: ToolAgentState) -> Dict[str, Any]:
     """
@@ -299,31 +255,10 @@ def route_after_decision(state: ToolAgentState) -> Literal["execute_tool", "END"
         return "execute_tool"
     return "END"
 
-# ============================================================
-# 转 -> 升级版 route_after_execution
-# ============================================================
-# def route_after_execution(state: ToolAgentState) -> Literal["should_use_tool", "END"]:
-#     """
-#     工具执行后，判断是否需要继续调用工具。
-#     """
-#
-#     # 检查最后一条消息是否为错误，或是否包含工具执行结果
-#     messages = state.get("messages", [])
-#     if not messages:
-#         return "END"
-#
-#
-#     last_msg = messages[-1]
-#     content = last_msg.content if hasattr(last_msg, "content") else ""
-#
-#     # 如果执行结果包含错误，或者只有工具结果，都回到决策节点让 Agent 决定是继续调用工具还是结束
-#     if "工具" in content and ("执行结果" in content or "执行失败" in content):
-#         return "should_use_tool"
-#
-#     return "END"
+
 
 # ============================================================
-# 升级：条件边函数（支持错误后的重试）
+# 条件边函数（支持错误后的重试）
 # ============================================================
 
 def route_after_execution(state: ToolAgentState) -> Literal["should_use_tool", "END"]:
@@ -348,10 +283,10 @@ def route_after_execution(state: ToolAgentState) -> Literal["should_use_tool", "
         all_success = all(item.get("success", False) for item in execution_summary)
         if all_success:
             # ✅ 全部成功 → 直接结束，不再循环
-            return "should_use_tool"
+            return "END"
         else:
             # ❌ 有失败 → 回到决策节点，让 Agent 决定是重试还是放弃
-            return "should_use_tool"
+            return "END"
     return "END"
 
 # ============================================================
