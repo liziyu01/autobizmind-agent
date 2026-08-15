@@ -48,3 +48,6 @@ htmlcov/
 chroma_db/
 *.db
 *.sqlite3
+
+# 个人临时文件
+temp.py

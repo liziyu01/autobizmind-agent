@@ -6,10 +6,8 @@
 import logging
 from typing import Optional, List, Dict, Any
 
-# 添加父目录到路径以便导入
 import sys
 import os
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data.init_db import query_orders_sql
@@ -17,42 +15,23 @@ from app.tool_registry import register_tool
 
 logger = logging.getLogger(__name__)
 
-
 # ============================================================
 # 1. 定义工具的执行函数
 # ============================================================
-
 def query_orders(
-        customer_name: Optional[str] = None,
-        status: Optional[str] = None,
-        limit: int = 20
+    customer_name: Optional[str] = None,
+    status: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 20
 ) -> List[Dict[str, Any]]:
-    """
-    查询电商订单。
-
-    Args:
-        customer_name: 客户姓名（支持模糊匹配）
-        status: 订单状态（pending/paid/shipped/completed/cancelled）
-        limit: 返回最大数量（默认 20）
-
-    Returns:
-        订单列表，每个订单包含 order_id, customer_name, amount, status, created_at
-    """
-    logger.info(f"🔍 查询订单: customer_name={customer_name}, status={status}, limit={limit}")
-
-    # 参数校验
-    if status and status not in ["pending", "paid", "shipped", "completed", "cancelled"]:
-        raise ValueError(f"无效的订单状态: {status}")
-
+    """增强版订单查询"""
     if limit < 1 or limit > 100:
         limit = 20
-
-    # 执行查询
-    results = query_orders_sql(customer_name, status, limit)
-
-    logger.info(f"✅ 查询到 {len(results)} 条订单")
-    return results
-
+    return query_orders_sql(customer_name, status, min_amount, max_amount,
+                           date_from, date_to, limit)
 
 # ============================================================
 # 2. 定义工具的 MCP 元数据
