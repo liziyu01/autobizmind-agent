@@ -3,7 +3,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-dotenv==1.0.1
 pydantic==2.10.4
-python-multipart==0.0.20
+python-multipart==0.0.32
+requests==2.34.2
 
 # Agent 框架（LangChain + LangGraph）
 langgraph==0.2.61
@@ -26,3 +27,6 @@ tiktoken==0.8.0
 
 # 数值计算
 numpy==1.26.4
+
+# 前端界面
+streamlit==1.37.0

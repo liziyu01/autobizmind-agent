@@ -62,7 +62,7 @@ def dict_to_message(data: Dict[str, Any]) -> BaseMessage:
 
 
 # ============================================================
-# 核心：使用 Redis List 实现滑动窗口
+# 使用 Redis List 实现滑动窗口
 # ============================================================
 
 def append_message(session_id: str, msg: BaseMessage) -> bool:
