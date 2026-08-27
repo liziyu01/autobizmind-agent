@@ -281,8 +281,8 @@ def unregister_tool(tool_name: str) -> bool:
     key = get_tool_key(tool_name)
     if tool_name in _handlers:
         del _handlers[tool_name]
-    global _handler_registry_version
-    _handler_registry_version += 1
+        global _handler_registry_version
+        _handler_registry_version += 1
     return redis_client.delete(key) > 0
 
 

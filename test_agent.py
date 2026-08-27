@@ -38,7 +38,6 @@ def main():
             result = agent.invoke(state)
             last_msg = result["messages"][-1]
             print(f"🤖 系统：{last_msg.content}")
-
             state = result
         except Exception as e:
             print(f"❌ 错误: {e}")

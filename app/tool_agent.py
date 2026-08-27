@@ -286,7 +286,7 @@ def route_after_execution(state: ToolAgentState) -> Literal["should_use_tool", "
             return "END"
         else:
             # ❌ 有失败 → 回到决策节点，让 Agent 决定是重试还是放弃
-            return "END"
+            return "execute_tool"
     return "END"
 
 # ============================================================
